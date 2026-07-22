@@ -17,7 +17,7 @@ const STATUS_COLOR: Record<ApplicationStatus, 'warning' | 'success' | 'danger'> 
   rejected: 'danger',
 };
 
-export default function ProfileScreen() {
+export default function AccountScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, logout, reviews, applications, getGarage, resetDemo } = useApp();
@@ -38,12 +38,7 @@ export default function ProfileScreen() {
             Sign in to write reviews, or claim and verify your garage.
           </ThemedText>
           <Button title="Sign in / Create account" icon="log-in" onPress={() => router.push('/login')} />
-          <Button
-            title="Reset demo data"
-            variant="outline"
-            icon="refresh"
-            onPress={resetDemo}
-          />
+          <Button title="Reset demo data" variant="outline" icon="refresh" onPress={resetDemo} />
         </View>
       </ScrollView>
     );

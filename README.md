@@ -12,9 +12,9 @@ ratings sourced from Google Maps.
 
 ## Features
 
-- **Browse-free directory** — an eBay-style scrollable list of garages; no account
-  needed to browse. Search by name, area or service; filter to verified only.
-- **Explore** — filter garages by service (oil change, engine, AC, tyres…) and region.
+- **Browse-free directory** — a single eBay-style scrollable list of garages; no account
+  needed to browse. Search by name/area/service, filter to verified only, and narrow by
+  **service** (oil change, engine, AC, tyres…) and **region** via inline filter rows.
 - **Garage detail** — location, phone, hours, services, and **two clearly separated
   rating sources**:
   - **App rating** — reviews written by users inside this app.
@@ -48,16 +48,14 @@ npx expo start --web     # open http://localhost:8081
 src/
 ├── app/                     # Expo Router routes (file-based)
 │   ├── _layout.tsx          # root Stack + AppProvider + theme
-│   ├── (tabs)/              # bottom tabs: Garages / Explore / Account
-│   │   ├── index.tsx        # garage list (search + verified filter)
-│   │   ├── explore.tsx      # filter by service + region
-│   │   └── profile.tsx      # account, roles, owner status, admin entry
+│   ├── index.tsx            # single browse screen: search + verified + service/region filters
+│   ├── account.tsx          # account (opened via header button): roles, owner status, admin entry
 │   ├── garage/[id].tsx      # garage detail (app vs Google reviews)
 │   ├── review/[id].tsx      # write an app review (modal)
 │   ├── login.tsx            # sign in / sign up with role choice (modal)
 │   ├── apply.tsx            # owner: claim a garage (modal)
 │   └── admin.tsx            # admin: verification requests
-├── components/              # StarRating, VerifiedBadge, GarageCard, Button, Chip, themed-*
+├── components/              # AccountButton, StarRating, VerifiedBadge, GarageCard, Button, Chip, themed-*
 ├── constants/theme.ts       # colors (light/dark), spacing, fonts
 ├── data/seed.ts             # mock Oman garages + Google-sourced reviews
 ├── store/app-context.tsx    # single source of truth (auth, reviews, applications)
