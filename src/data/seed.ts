@@ -1,0 +1,227 @@
+import type { Database, Garage } from '@/types';
+
+/**
+ * Seed dataset of Oman garages.
+ *
+ * NOTE: `googleRating`, `googleRatingCount` and `googleReviews` represent data that
+ * would be sourced from Google Maps and are always presented in the UI as
+ * "from Google". The app's own rating/review system is stored separately
+ * (see `InternalReview`). This is mock seed data for development only.
+ */
+
+export const ALL_SERVICES = [
+  'Oil Change',
+  'Engine Repair',
+  'AC Service',
+  'Tyres & Alignment',
+  'Electrical',
+  'Body & Paint',
+  'Diagnostics',
+  'Denting',
+  'Brakes',
+  'Battery',
+] as const;
+
+const GARAGES: Garage[] = [
+  {
+    id: 'g_alkhuwair_autopro',
+    name: 'AutoPro Service Center',
+    area: 'Al Khuwair, Muscat',
+    address: 'Way 3510, Al Khuwair, Muscat',
+    lat: 23.5959,
+    lng: 58.4206,
+    phone: '+968 2448 1122',
+    services: ['Diagnostics', 'Engine Repair', 'AC Service', 'Oil Change', 'Electrical'],
+    hours: 'Sat–Thu 8:00–20:00, Fri closed',
+    verified: true,
+    googleRating: 4.6,
+    googleRatingCount: 412,
+    googleReviews: [
+      { author: 'Salim A.', rating: 5, text: 'Very honest team. Diagnosed my Land Cruiser issue quickly and did not overcharge.', relativeTime: '2 weeks ago' },
+      { author: 'Priya N.', rating: 4, text: 'Good AC service, cooling is much better now. Waiting area could be nicer.', relativeTime: '1 month ago' },
+      { author: 'Khalid R.', rating: 5, text: 'Best diagnostics in Al Khuwair. They explain everything before starting.', relativeTime: '2 months ago' },
+    ],
+  },
+  {
+    id: 'g_ruwi_gulfmotors',
+    name: 'Gulf Motors Workshop',
+    area: 'Ruwi, Muscat',
+    address: 'Ruwi High Street, Muscat',
+    lat: 23.5915,
+    lng: 58.5432,
+    phone: '+968 2470 3344',
+    services: ['Body & Paint', 'Denting', 'Tyres & Alignment', 'Brakes'],
+    hours: 'Sat–Thu 8:30–19:30, Fri 14:00–19:00',
+    verified: true,
+    googleRating: 4.3,
+    googleRatingCount: 287,
+    googleReviews: [
+      { author: 'Ahmed B.', rating: 4, text: 'Solid paint job after my accident, colour match was perfect.', relativeTime: '3 weeks ago' },
+      { author: 'Maria S.', rating: 5, text: 'Fixed a big dent for a fair price. Recommended.', relativeTime: '1 month ago' },
+      { author: 'John D.', rating: 3, text: 'Work is good but they took two days longer than promised.', relativeTime: '2 months ago' },
+    ],
+  },
+  {
+    id: 'g_ghubra_speedtune',
+    name: 'SpeedTune Garage',
+    area: 'Al Ghubra, Muscat',
+    address: '18th November St, Al Ghubra North, Muscat',
+    lat: 23.5786,
+    lng: 58.4021,
+    phone: '+968 2450 7788',
+    services: ['Engine Repair', 'Diagnostics', 'Brakes', 'Battery', 'Oil Change'],
+    hours: 'Sat–Thu 7:30–21:00, Fri closed',
+    verified: false,
+    googleRating: 4.1,
+    googleRatingCount: 156,
+    googleReviews: [
+      { author: 'Yousuf M.', rating: 5, text: 'They saved my engine when another garage wanted to replace it. Trustworthy.', relativeTime: '5 days ago' },
+      { author: 'Fatma H.', rating: 3, text: 'Decent work but the reception is often busy on phone.', relativeTime: '3 weeks ago' },
+    ],
+  },
+  {
+    id: 'g_seeb_desertwheels',
+    name: 'Desert Wheels Auto',
+    area: 'Seeb, Muscat',
+    address: 'Mawaleh South, Seeb, Muscat',
+    lat: 23.6702,
+    lng: 58.1891,
+    phone: '+968 2442 9900',
+    services: ['Tyres & Alignment', 'Battery', 'Oil Change', 'AC Service'],
+    hours: 'Sat–Thu 8:00–20:00, Fri 15:00–20:00',
+    verified: false,
+    googleRating: 3.9,
+    googleRatingCount: 98,
+    googleReviews: [
+      { author: 'Nasser K.', rating: 4, text: 'Quick tyre change and alignment. In and out in 40 minutes.', relativeTime: '1 week ago' },
+      { author: 'Lena P.', rating: 4, text: 'Reasonable prices for oil change. Friendly staff.', relativeTime: '1 month ago' },
+    ],
+  },
+  {
+    id: 'g_wadikabir_royaltech',
+    name: 'Royal Tech Auto Care',
+    area: 'Wadi Kabir, Muscat',
+    address: 'Wadi Kabir Industrial Area, Muscat',
+    lat: 23.5836,
+    lng: 58.5601,
+    phone: '+968 2481 2020',
+    services: ['Engine Repair', 'Electrical', 'AC Service', 'Diagnostics', 'Body & Paint'],
+    hours: 'Sat–Thu 8:00–18:30, Fri closed',
+    verified: true,
+    googleRating: 4.7,
+    googleRatingCount: 531,
+    googleReviews: [
+      { author: 'Sami Q.', rating: 5, text: 'The only place I trust with my BMW. Genuine parts and skilled technicians.', relativeTime: '4 days ago' },
+      { author: 'Aisha T.', rating: 5, text: 'Electrical fault fixed same day. Very professional.', relativeTime: '2 weeks ago' },
+      { author: 'Robert L.', rating: 4, text: 'Premium service, premium price, but worth it.', relativeTime: '1 month ago' },
+    ],
+  },
+  {
+    id: 'g_maabela_quickfix',
+    name: 'QuickFix Motors',
+    area: "Ma'abela, Muscat",
+    address: "Ma'abela South, Muscat",
+    lat: 23.6421,
+    lng: 58.2456,
+    phone: '+968 2455 6161',
+    services: ['Oil Change', 'Brakes', 'Battery', 'Tyres & Alignment'],
+    hours: 'Sat–Thu 7:00–22:00, Fri 14:00–22:00',
+    verified: false,
+    googleRating: 4.0,
+    googleRatingCount: 74,
+    googleReviews: [
+      { author: 'Hamed S.', rating: 4, text: 'Open late which is very convenient. Good for quick jobs.', relativeTime: '6 days ago' },
+      { author: 'Deepa R.', rating: 4, text: 'Fair brake replacement price. No pressure to buy extras.', relativeTime: '3 weeks ago' },
+    ],
+  },
+  {
+    id: 'g_sohar_northstar',
+    name: 'North Star Garage',
+    area: 'Sohar',
+    address: 'Falaj Al Qabail, Sohar',
+    lat: 24.3643,
+    lng: 56.7468,
+    phone: '+968 2684 3311',
+    services: ['Engine Repair', 'Diagnostics', 'AC Service', 'Oil Change', 'Electrical'],
+    hours: 'Sat–Thu 8:00–20:00, Fri closed',
+    verified: true,
+    googleRating: 4.5,
+    googleRatingCount: 203,
+    googleReviews: [
+      { author: 'Ibrahim A.', rating: 5, text: 'Best garage in Sohar. Honest and fast.', relativeTime: '1 week ago' },
+      { author: 'Sunil V.', rating: 4, text: 'Good AC regas, cold again. Recommended for the north.', relativeTime: '1 month ago' },
+    ],
+  },
+  {
+    id: 'g_salalah_monsoon',
+    name: 'Monsoon Auto Workshop',
+    area: 'Salalah',
+    address: 'Al Saada St, Salalah',
+    lat: 17.0194,
+    lng: 54.0897,
+    phone: '+968 2329 5522',
+    services: ['Body & Paint', 'Denting', 'AC Service', 'Tyres & Alignment'],
+    hours: 'Sat–Thu 8:30–19:00, Fri closed',
+    verified: false,
+    googleRating: 4.2,
+    googleRatingCount: 141,
+    googleReviews: [
+      { author: 'Marwan D.', rating: 5, text: 'Great body work after khareef season damage. Very careful.', relativeTime: '2 weeks ago' },
+      { author: 'Grace M.', rating: 3, text: 'Good work but busy during khareef, book ahead.', relativeTime: '2 months ago' },
+    ],
+  },
+  {
+    id: 'g_nizwa_oasis',
+    name: 'Oasis Car Care',
+    area: 'Nizwa',
+    address: 'Firq, Nizwa',
+    lat: 22.9333,
+    lng: 57.5333,
+    phone: '+968 2543 7070',
+    services: ['Oil Change', 'Engine Repair', 'Brakes', 'Battery', 'Diagnostics'],
+    hours: 'Sat–Thu 7:30–20:00, Fri 15:00–20:00',
+    verified: false,
+    googleRating: 4.4,
+    googleRatingCount: 88,
+    googleReviews: [
+      { author: 'Talal H.', rating: 5, text: 'Reliable garage in the interior. Fixed my 4x4 for the mountains.', relativeTime: '1 week ago' },
+      { author: 'Omar F.', rating: 4, text: 'Good service, they know Toyota and Nissan very well.', relativeTime: '1 month ago' },
+    ],
+  },
+  {
+    id: 'g_barka_coastline',
+    name: 'Coastline Auto Garage',
+    area: 'Barka',
+    address: 'Barka Roundabout, Barka',
+    lat: 23.7069,
+    lng: 57.8892,
+    phone: '+968 2688 4141',
+    services: ['Tyres & Alignment', 'AC Service', 'Oil Change', 'Electrical', 'Brakes'],
+    hours: 'Sat–Thu 8:00–20:30, Fri closed',
+    verified: false,
+    googleRating: 3.8,
+    googleRatingCount: 63,
+    googleReviews: [
+      { author: 'Zaid N.', rating: 4, text: 'Convenient on the way to Muscat. Quick tyre repair.', relativeTime: '2 weeks ago' },
+      { author: 'Helen C.', rating: 3, text: 'Average, but prices are honest and no upselling.', relativeTime: '1 month ago' },
+    ],
+  },
+];
+
+export function createSeedDatabase(): Database {
+  return {
+    // A single seeded admin account so the verification dashboard can be demoed.
+    users: [
+      {
+        id: 'u_admin',
+        name: 'App Admin',
+        email: 'admin@garaje.om',
+        role: 'admin',
+        ownedGarageId: null,
+      },
+    ],
+    garages: GARAGES.map((g) => ({ ...g })),
+    reviews: [],
+    applications: [],
+  };
+}
