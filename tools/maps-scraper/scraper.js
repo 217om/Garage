@@ -30,19 +30,7 @@ function parseArgs() {
   return opts;
 }
 
-const CSV_COLUMNS = ['name', 'category', 'rating', 'reviewCount', 'address', 'phone', 'website', 'mapsUrl', 'lat', 'lng', 'photoUrl', 'error'];
-
-function csvEscape(value) {
-  if (value === null || value === undefined) return '';
-  const s = String(value);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-function toCsv(records) {
-  const header = CSV_COLUMNS.join(',');
-  const rows = records.map((r) => CSV_COLUMNS.map((col) => csvEscape(r[col])).join(','));
-  return [header, ...rows].join('\n') + '\n';
-}
+const { toCsv } = require('./csv');
 
 function extractCoordsFromUrl(url) {
   const m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
@@ -213,8 +201,13 @@ async function main() {
   console.log(`[+] Saved ${results.length} records to ${outPath}`);
 
   const csvPath = outPath.replace(/\.json$/i, '.csv');
-  fs.writeFileSync(csvPath, toCsv(results), 'utf-8');
-  console.log(`[+] Saved CSV to ${csvPath}`);
+  try {
+    fs.writeFileSync(csvPath, toCsv(results), 'utf-8');
+    console.log(`[+] Saved CSV to ${csvPath}`);
+  } catch (err) {
+    console.error(`[!] Could not write CSV (${err.code || err.message}) — is ${csvPath} open in Excel? The JSON above is unaffected.`);
+    console.error(`[!] Once it's closed, run: node json-to-csv.js "${outPath}"`);
+  }
 }
 
 main().catch((err) => {
