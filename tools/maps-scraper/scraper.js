@@ -138,9 +138,8 @@ async function scrapePlaceReviews(page, maxReviews) {
   let cardSelector = null;
   for (let i = 0; i < 6 && !cardSelector; i++) {
     cardSelector = await page.evaluate(
-      (fsel, cands) => cands.find((c) => document.querySelector(fsel)?.querySelector(c)) || null,
-      feedSelector,
-      CARD_SELECTORS
+      ({ fsel, cands }) => cands.find((c) => document.querySelector(fsel)?.querySelector(c)) || null,
+      { fsel: feedSelector, cands: CARD_SELECTORS }
     );
     if (!cardSelector) await page.waitForTimeout(500);
   }
@@ -150,9 +149,8 @@ async function scrapePlaceReviews(page, maxReviews) {
   let lastCount = 0;
   while (idleRounds < 6) {
     const count = await page.evaluate(
-      (fsel, csel) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
-      feedSelector,
-      cardSelector
+      ({ fsel, csel }) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
+      { fsel: feedSelector, csel: cardSelector }
     );
     if (Number.isFinite(maxReviews) && count >= maxReviews) break;
     await page.evaluate((fsel) => {
@@ -161,9 +159,8 @@ async function scrapePlaceReviews(page, maxReviews) {
     }, feedSelector);
     await page.waitForTimeout(1500);
     const newCount = await page.evaluate(
-      (fsel, csel) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
-      feedSelector,
-      cardSelector
+      ({ fsel, csel }) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
+      { fsel: feedSelector, csel: cardSelector }
     );
     if (newCount === lastCount) idleRounds++; else idleRounds = 0;
     lastCount = newCount;
@@ -176,7 +173,7 @@ async function scrapePlaceReviews(page, maxReviews) {
   await page.waitForTimeout(500);
 
   const reviews = await page.evaluate(
-    (fsel, csel, max) => {
+    ({ fsel, csel, max }) => {
       const feed = document.querySelector(fsel);
       if (!feed) return [];
       const cards = Array.from(feed.querySelectorAll(csel));
@@ -190,9 +187,7 @@ async function scrapePlaceReviews(page, maxReviews) {
         return { reviewer, rating, date, text };
       });
     },
-    feedSelector,
-    cardSelector,
-    maxReviews
+    { fsel: feedSelector, csel: cardSelector, max: maxReviews }
   );
 
   return { reviews, debug: reviews.length ? 'ok' : 'no-matches' };
