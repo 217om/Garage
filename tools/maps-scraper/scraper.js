@@ -91,60 +91,111 @@ async function autoScrollResults(page, maxIdleRounds = 8) {
 // Opens the reviews panel on an already-loaded place page and scrolls it
 // until no more reviews load, then expands truncated text and extracts
 // each review. Google's review-panel class names are obfuscated and do
-// change over time (currently: .jftiEf per review card, .d4r55 reviewer
-// name, .rsqaWe relative date, .wiI7pd review text) — if this comes back
-// empty on a place you know has reviews, those are the selectors to
-// re-inspect via devtools and fix.
+// change over time, so this tries several known candidates for each part
+// (trigger button, scrollable feed, review card) and reports which stage
+// it got stuck at via `debug`, instead of silently returning nothing.
 async function scrapePlaceReviews(page, maxReviews) {
-  const opened = await page.evaluate(() => {
-    const el = Array.from(document.querySelectorAll('button, span')).find((el) =>
-      /^\(?[\d,]+\)?\s*reviews?$|^[\d,]+\s*مراجع/.test((el.textContent || '').trim())
-    );
-    if (!el) return false;
-    (el.closest('button') || el).click();
-    return true;
-  });
-  if (!opened) return [];
+  const TRIGGER_SELECTORS = [
+    'button[jsaction*="reviewChart"]',
+    'button[aria-label*="review" i]',
+    'button[aria-label*="مراجع"]',
+    'button[aria-label*="تقييم"]',
+  ];
+  const FEED_SELECTORS = ['div.m6QErb[role="feed"]', 'div[role="feed"]', 'div.m6QErb'];
+  const CARD_SELECTORS = ['.jftiEf', '.jJc9Ad', '[data-review-id]'];
+
+  let opened = false;
+  for (const sel of TRIGGER_SELECTORS) {
+    opened = await page.evaluate((s) => {
+      const el = document.querySelector(s);
+      if (!el) return false;
+      el.click();
+      return true;
+    }, sel);
+    if (opened) break;
+  }
+  if (!opened) {
+    opened = await page.evaluate(() => {
+      const el = Array.from(document.querySelectorAll('button, span, div')).find((el) =>
+        /^\(?[\d,]+\)?\s*reviews?$|^[\d,]+\s*(مراجع|تقييم)/i.test((el.textContent || '').trim())
+      );
+      if (!el) return false;
+      (el.closest('button') || el).click();
+      return true;
+    });
+  }
+  if (!opened) return { reviews: [], debug: 'no-trigger' };
 
   await page.waitForTimeout(1500);
 
-  const feedSelector = 'div.m6QErb[role="feed"], div[role="feed"]';
-  const hasFeed = await page.waitForSelector(feedSelector, { timeout: 10000 }).then(() => true).catch(() => false);
-  if (!hasFeed) return [];
+  let feedSelector = null;
+  for (let i = 0; i < 8 && !feedSelector; i++) {
+    feedSelector = await page.evaluate((cands) => cands.find((c) => document.querySelector(c)) || null, FEED_SELECTORS);
+    if (!feedSelector) await page.waitForTimeout(500);
+  }
+  if (!feedSelector) return { reviews: [], debug: 'no-feed' };
+
+  let cardSelector = null;
+  for (let i = 0; i < 6 && !cardSelector; i++) {
+    cardSelector = await page.evaluate(
+      (fsel, cands) => cands.find((c) => document.querySelector(fsel)?.querySelector(c)) || null,
+      feedSelector,
+      CARD_SELECTORS
+    );
+    if (!cardSelector) await page.waitForTimeout(500);
+  }
+  if (!cardSelector) return { reviews: [], debug: 'no-cards' };
 
   let idleRounds = 0;
   let lastCount = 0;
   while (idleRounds < 6) {
-    const count = await page.evaluate((sel) => document.querySelectorAll(`${sel} .jftiEf`).length, feedSelector);
+    const count = await page.evaluate(
+      (fsel, csel) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
+      feedSelector,
+      cardSelector
+    );
     if (Number.isFinite(maxReviews) && count >= maxReviews) break;
-    await page.evaluate((sel) => {
-      const feed = document.querySelector(sel);
+    await page.evaluate((fsel) => {
+      const feed = document.querySelector(fsel);
       if (feed) feed.scrollTop = feed.scrollHeight;
     }, feedSelector);
     await page.waitForTimeout(1500);
-    const newCount = await page.evaluate((sel) => document.querySelectorAll(`${sel} .jftiEf`).length, feedSelector);
+    const newCount = await page.evaluate(
+      (fsel, csel) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
+      feedSelector,
+      cardSelector
+    );
     if (newCount === lastCount) idleRounds++; else idleRounds = 0;
     lastCount = newCount;
   }
 
   // Expand "More" buttons on truncated review text before reading it.
-  await page.evaluate((sel) => {
-    document.querySelectorAll(`${sel} button[aria-label="See more"], ${sel} button.w8nwRe`).forEach((b) => b.click());
+  await page.evaluate((fsel) => {
+    document.querySelector(fsel)?.querySelectorAll('button[aria-label="See more"], button.w8nwRe').forEach((b) => b.click());
   }, feedSelector);
   await page.waitForTimeout(500);
 
-  return page.evaluate((sel, max) => {
-    const cards = Array.from(document.querySelectorAll(`${sel} .jftiEf`));
-    return cards.slice(0, Number.isFinite(max) ? max : cards.length).map((card) => {
-      const reviewer = card.querySelector('.d4r55')?.textContent.trim() || null;
-      const ratingLabel = card.querySelector('span[role="img"][aria-label*="star"]')?.getAttribute('aria-label') || '';
-      const ratingMatch = ratingLabel.match(/([\d.]+)\s*star/);
-      const rating = ratingMatch ? parseFloat(ratingMatch[1]) : null;
-      const date = card.querySelector('.rsqaWe')?.textContent.trim() || null;
-      const text = card.querySelector('.wiI7pd')?.textContent.trim() || null;
-      return { reviewer, rating, date, text };
-    });
-  }, feedSelector, maxReviews);
+  const reviews = await page.evaluate(
+    (fsel, csel, max) => {
+      const feed = document.querySelector(fsel);
+      if (!feed) return [];
+      const cards = Array.from(feed.querySelectorAll(csel));
+      return cards.slice(0, Number.isFinite(max) ? max : cards.length).map((card) => {
+        const reviewer = card.querySelector('.d4r55')?.textContent.trim() || null;
+        const ratingLabel = card.querySelector('span[role="img"][aria-label*="star" i]')?.getAttribute('aria-label') || '';
+        const ratingMatch = ratingLabel.match(/([\d.]+)\s*star/i);
+        const rating = ratingMatch ? parseFloat(ratingMatch[1]) : null;
+        const date = card.querySelector('.rsqaWe')?.textContent.trim() || null;
+        const text = card.querySelector('.wiI7pd')?.textContent.trim() || card.textContent.trim().slice(0, 500) || null;
+        return { reviewer, rating, date, text };
+      });
+    },
+    feedSelector,
+    cardSelector,
+    maxReviews
+  );
+
+  return { reviews, debug: reviews.length ? 'ok' : 'no-matches' };
 }
 
 async function scrapePlace(context, url, maxReviews) {
@@ -199,8 +250,11 @@ async function scrapePlace(context, url, maxReviews) {
     const { lat, lng } = extractCoordsFromUrl(page.url());
 
     let reviews = [];
+    let reviewsDebug = 'skipped';
     if (maxReviews > 0) {
-      reviews = await scrapePlaceReviews(page, maxReviews).catch(() => []);
+      const r = await scrapePlaceReviews(page, maxReviews).catch((e) => ({ reviews: [], debug: `error:${e.message}` }));
+      reviews = r.reviews;
+      reviewsDebug = r.debug;
     }
 
     return {
@@ -209,6 +263,7 @@ async function scrapePlace(context, url, maxReviews) {
       lat,
       lng,
       reviews,
+      reviewsDebug,
     };
   } catch (err) {
     return { mapsUrl: url, error: err.message };
@@ -274,11 +329,17 @@ async function main() {
   results.forEach((r, i) => { r.id = i + 1; });
 
   const allReviews = [];
+  const debugCounts = {};
   for (const r of results) {
     for (const rev of r.reviews || []) {
       allReviews.push({ businessId: r.id, businessName: r.name, ...rev });
     }
+    debugCounts[r.reviewsDebug] = (debugCounts[r.reviewsDebug] || 0) + 1;
     delete r.reviews;
+    delete r.reviewsDebug;
+  }
+  if (opts.maxReviews > 0) {
+    console.log(`[+] Review-scrape outcomes across ${results.length} places: ${JSON.stringify(debugCounts)}`);
   }
 
   const outPath = path.resolve(process.cwd(), opts.out);
