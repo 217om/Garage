@@ -95,16 +95,20 @@ async function autoScrollResults(page, maxIdleRounds = 8) {
 // (trigger button, scrollable feed, review card) and reports which stage
 // it got stuck at via `debug`, instead of silently returning nothing.
 let diagnosedNoCards = false;
+let diagnosedNoTrigger = false;
 
 async function scrapePlaceReviews(page, maxReviews) {
   // IMPORTANT: do NOT match a bare "review" substring in aria-label/text —
   // "Write a review" / "أضف مراجعة" buttons near the top of every place page
   // also contain that word and will get clicked instead, opening a review
-  // *composition* dialog rather than the reviews list (this was confirmed
-  // via the DOM diagnostic: it found only the page's one aggregate rating,
-  // not per-review ratings). Require the label to start with a number so
-  // only the "<N> reviews" summary control can match.
-  const COUNT_LABEL_RE = /^\(?[\d,]+\)?\s*(reviews?|مراجع|تقييمات?)\b/i;
+  // *composition* dialog rather than the reviews list (confirmed via an
+  // earlier DOM diagnostic: it found only the page's one aggregate rating).
+  // Require a digit immediately before "review(s)" so only a "<N> review(s)"
+  // count control can match. NOT anchored to the start of the string, since
+  // the real label is typically combined, e.g. "4.7 stars 27 reviews" —
+  // anchoring to ^ would require it to start with the count, which it
+  // usually doesn't (the star rating comes first).
+  const COUNT_LABEL_RE = /(?:^|[^\d])([\d][\d,]*)\)?\s*(reviews?|مراجع|تقييمات?)\b/i;
 
   let opened = await page.evaluate((reStr) => {
     const re = new RegExp(reStr, 'i');
@@ -131,7 +135,19 @@ async function scrapePlaceReviews(page, maxReviews) {
       return true;
     });
   }
-  if (!opened) return { reviews: [], debug: 'no-trigger' };
+  if (!opened) {
+    if (!diagnosedNoTrigger) {
+      diagnosedNoTrigger = true;
+      const diag = await page.evaluate(() => {
+        const els = Array.from(document.querySelectorAll('[aria-label]'))
+          .map((el) => el.getAttribute('aria-label'))
+          .filter((label) => /review|star|مراجع|تقييم/i.test(label || ''));
+        return { candidateAriaLabels: [...new Set(els)].slice(0, 15) };
+      });
+      console.error('[DEBUG-TRIGGER] ' + JSON.stringify(diag));
+    }
+    return { reviews: [], debug: 'no-trigger' };
+  }
 
   await page.waitForTimeout(1500);
 
