@@ -1,4 +1,5 @@
-const CSV_COLUMNS = ['name', 'category', 'rating', 'reviewCount', 'address', 'phone', 'website', 'mapsUrl', 'lat', 'lng', 'photoUrl', 'error'];
+const BUSINESS_COLUMNS = ['id', 'name', 'category', 'rating', 'reviewCount', 'address', 'phone', 'website', 'mapsUrl', 'lat', 'lng', 'photoUrl', 'error'];
+const REVIEW_COLUMNS = ['businessId', 'businessName', 'reviewer', 'rating', 'date', 'text'];
 
 function csvEscape(value) {
   if (value === null || value === undefined) return '';
@@ -6,10 +7,10 @@ function csvEscape(value) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function toCsv(records) {
-  const header = CSV_COLUMNS.join(',');
-  const rows = records.map((r) => CSV_COLUMNS.map((col) => csvEscape(r[col])).join(','));
+function toCsv(records, columns = BUSINESS_COLUMNS) {
+  const header = columns.join(',');
+  const rows = records.map((r) => columns.map((col) => csvEscape(r[col])).join(','));
   return [header, ...rows].join('\n') + '\n';
 }
 
-module.exports = { toCsv, csvEscape, CSV_COLUMNS };
+module.exports = { toCsv, csvEscape, BUSINESS_COLUMNS, REVIEW_COLUMNS };
