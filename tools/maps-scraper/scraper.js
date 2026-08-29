@@ -94,6 +94,8 @@ async function autoScrollResults(page, maxIdleRounds = 8) {
 // change over time, so this tries several known candidates for each part
 // (trigger button, scrollable feed, review card) and reports which stage
 // it got stuck at via `debug`, instead of silently returning nothing.
+let diagnosedNoCards = false;
+
 async function scrapePlaceReviews(page, maxReviews) {
   const TRIGGER_SELECTORS = [
     'button[jsaction*="reviewChart"]',
@@ -143,7 +145,36 @@ async function scrapePlaceReviews(page, maxReviews) {
     );
     if (!cardSelector) await page.waitForTimeout(500);
   }
-  if (!cardSelector) return { reviews: [], debug: 'no-cards' };
+  if (!cardSelector) {
+    if (!diagnosedNoCards) {
+      diagnosedNoCards = true;
+      const diag = await page.evaluate(({ fsel }) => {
+        const feed = document.querySelector(fsel);
+        const starEls = Array.from(document.querySelectorAll('span[aria-label*="star" i]'));
+        const starAncestors = starEls.slice(0, 6).map((el) => {
+          let anc = el;
+          for (let i = 0; i < 4 && anc.parentElement; i++) anc = anc.parentElement;
+          return { ariaLabel: el.getAttribute('aria-label'), ancestorTag: anc.tagName, ancestorClass: anc.className };
+        });
+        const feeds = Array.from(document.querySelectorAll('div[role="feed"]')).map((f) => ({
+          ariaLabel: f.getAttribute('aria-label'),
+          class: f.className,
+          childCount: f.children.length,
+          firstChildClass: f.children[0]?.className || null,
+          firstChildTag: f.children[0]?.tagName || null,
+        }));
+        return {
+          matchedFeedClass: feed?.className || null,
+          matchedFeedChildCount: feed?.children.length ?? null,
+          starRatingCount: starEls.length,
+          starRatingAncestors: starAncestors,
+          allFeeds: feeds,
+        };
+      }, { fsel: feedSelector });
+      console.error('[DEBUG-REVIEWS] ' + JSON.stringify(diag));
+    }
+    return { reviews: [], debug: 'no-cards' };
+  }
 
   let idleRounds = 0;
   let lastCount = 0;
