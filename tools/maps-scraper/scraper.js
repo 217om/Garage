@@ -97,32 +97,37 @@ async function autoScrollResults(page, maxIdleRounds = 8) {
 let diagnosedNoCards = false;
 
 async function scrapePlaceReviews(page, maxReviews) {
-  const TRIGGER_SELECTORS = [
-    'button[jsaction*="reviewChart"]',
-    'button[aria-label*="review" i]',
-    'button[aria-label*="مراجع"]',
-    'button[aria-label*="تقييم"]',
-  ];
-  const FEED_SELECTORS = ['div.m6QErb[role="feed"]', 'div[role="feed"]', 'div.m6QErb'];
-  const CARD_SELECTORS = ['.jftiEf', '.jJc9Ad', '[data-review-id]'];
+  // IMPORTANT: do NOT match a bare "review" substring in aria-label/text —
+  // "Write a review" / "أضف مراجعة" buttons near the top of every place page
+  // also contain that word and will get clicked instead, opening a review
+  // *composition* dialog rather than the reviews list (this was confirmed
+  // via the DOM diagnostic: it found only the page's one aggregate rating,
+  // not per-review ratings). Require the label to start with a number so
+  // only the "<N> reviews" summary control can match.
+  const COUNT_LABEL_RE = /^\(?[\d,]+\)?\s*(reviews?|مراجع|تقييمات?)\b/i;
 
-  let opened = false;
-  for (const sel of TRIGGER_SELECTORS) {
-    opened = await page.evaluate((s) => {
-      const el = document.querySelector(s);
+  let opened = await page.evaluate((reStr) => {
+    const re = new RegExp(reStr, 'i');
+    const el = Array.from(document.querySelectorAll('[aria-label]')).find((el) => re.test((el.getAttribute('aria-label') || '').trim()));
+    if (!el) return false;
+    (el.closest('button') || el).click();
+    return true;
+  }, COUNT_LABEL_RE.source);
+
+  if (!opened) {
+    opened = await page.evaluate((reStr) => {
+      const re = new RegExp(reStr, 'i');
+      const el = Array.from(document.querySelectorAll('button, span, div')).find((el) => re.test((el.textContent || '').trim()));
       if (!el) return false;
-      el.click();
+      (el.closest('button') || el).click();
       return true;
-    }, sel);
-    if (opened) break;
+    }, COUNT_LABEL_RE.source);
   }
   if (!opened) {
     opened = await page.evaluate(() => {
-      const el = Array.from(document.querySelectorAll('button, span, div')).find((el) =>
-        /^\(?[\d,]+\)?\s*reviews?$|^[\d,]+\s*(مراجع|تقييم)/i.test((el.textContent || '').trim())
-      );
+      const el = document.querySelector('button[jsaction*="reviewChart"], button[jsaction*="moreReviews"]');
       if (!el) return false;
-      (el.closest('button') || el).click();
+      el.click();
       return true;
     });
   }
@@ -130,45 +135,68 @@ async function scrapePlaceReviews(page, maxReviews) {
 
   await page.waitForTimeout(1500);
 
+  // Prefer a feed whose own aria-label mentions reviews (distinguishes it
+  // from the photos carousel or other role="feed" panels on the same page,
+  // which can otherwise match first and have nothing to do with reviews).
   let feedSelector = null;
   for (let i = 0; i < 8 && !feedSelector; i++) {
-    feedSelector = await page.evaluate((cands) => cands.find((c) => document.querySelector(c)) || null, FEED_SELECTORS);
+    feedSelector = await page.evaluate(() => {
+      const feeds = Array.from(document.querySelectorAll('div[role="feed"]'));
+      if (feeds.length === 0) return null;
+      const labeled = feeds.find((f) => /review|مراجع|تقييم/i.test(f.getAttribute('aria-label') || ''));
+      const chosen = labeled || feeds.find((f) => f.children.length > 1) || feeds[0];
+      if (!chosen.id) chosen.id = '__reviews_feed__';
+      return `#${chosen.id}`;
+    });
     if (!feedSelector) await page.waitForTimeout(500);
   }
   if (!feedSelector) return { reviews: [], debug: 'no-feed' };
 
-  let cardSelector = null;
-  for (let i = 0; i < 6 && !cardSelector; i++) {
-    cardSelector = await page.evaluate(
-      ({ fsel, cands }) => cands.find((c) => document.querySelector(fsel)?.querySelector(c)) || null,
-      { fsel: feedSelector, cands: CARD_SELECTORS }
+  // Tag review cards structurally instead of guessing Google's obfuscated
+  // class names: a direct child of the reviews feed that contains a
+  // per-review star rating is a review card, regardless of what class it
+  // has. This survives Google's routine class-name churn. Tagging is
+  // re-run on every scroll since new children get appended.
+  const CARD_TAG = 'data-scraper-review-card';
+  const tagAndCount = () =>
+    page.evaluate(
+      ({ fsel, tag }) => {
+        const feed = document.querySelector(fsel);
+        if (!feed) return 0;
+        Array.from(feed.children).forEach((c) => {
+          if (!c.hasAttribute(tag) && c.querySelector('span[aria-label*="star" i]')) c.setAttribute(tag, '1');
+        });
+        return feed.querySelectorAll(`[${tag}]`).length;
+      },
+      { fsel: feedSelector, tag: CARD_TAG }
     );
-    if (!cardSelector) await page.waitForTimeout(500);
+
+  let lastCount = await tagAndCount();
+  let idleRounds = 0;
+  while (idleRounds < 6) {
+    if (Number.isFinite(maxReviews) && lastCount >= maxReviews) break;
+    await page.evaluate((fsel) => {
+      const feed = document.querySelector(fsel);
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, feedSelector);
+    await page.waitForTimeout(1500);
+    const newCount = await tagAndCount();
+    if (newCount === lastCount) idleRounds++; else idleRounds = 0;
+    lastCount = newCount;
   }
-  if (!cardSelector) {
+
+  if (lastCount === 0) {
     if (!diagnosedNoCards) {
       diagnosedNoCards = true;
       const diag = await page.evaluate(({ fsel }) => {
         const feed = document.querySelector(fsel);
-        const starEls = Array.from(document.querySelectorAll('span[aria-label*="star" i]'));
-        const starAncestors = starEls.slice(0, 6).map((el) => {
-          let anc = el;
-          for (let i = 0; i < 4 && anc.parentElement; i++) anc = anc.parentElement;
-          return { ariaLabel: el.getAttribute('aria-label'), ancestorTag: anc.tagName, ancestorClass: anc.className };
-        });
-        const feeds = Array.from(document.querySelectorAll('div[role="feed"]')).map((f) => ({
-          ariaLabel: f.getAttribute('aria-label'),
-          class: f.className,
-          childCount: f.children.length,
-          firstChildClass: f.children[0]?.className || null,
-          firstChildTag: f.children[0]?.tagName || null,
-        }));
+        const starEls = feed ? Array.from(feed.querySelectorAll('span[aria-label*="star" i]')) : [];
         return {
           matchedFeedClass: feed?.className || null,
+          matchedFeedAriaLabel: feed?.getAttribute('aria-label') || null,
           matchedFeedChildCount: feed?.children.length ?? null,
-          starRatingCount: starEls.length,
-          starRatingAncestors: starAncestors,
-          allFeeds: feeds,
+          starsInFeed: starEls.length,
+          firstChildOuterHtmlSnippet: feed?.children[0]?.outerHTML?.slice(0, 400) || null,
         };
       }, { fsel: feedSelector });
       console.error('[DEBUG-REVIEWS] ' + JSON.stringify(diag));
@@ -176,49 +204,49 @@ async function scrapePlaceReviews(page, maxReviews) {
     return { reviews: [], debug: 'no-cards' };
   }
 
-  let idleRounds = 0;
-  let lastCount = 0;
-  while (idleRounds < 6) {
-    const count = await page.evaluate(
-      ({ fsel, csel }) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
-      { fsel: feedSelector, csel: cardSelector }
-    );
-    if (Number.isFinite(maxReviews) && count >= maxReviews) break;
-    await page.evaluate((fsel) => {
-      const feed = document.querySelector(fsel);
-      if (feed) feed.scrollTop = feed.scrollHeight;
-    }, feedSelector);
-    await page.waitForTimeout(1500);
-    const newCount = await page.evaluate(
-      ({ fsel, csel }) => document.querySelector(fsel)?.querySelectorAll(csel).length || 0,
-      { fsel: feedSelector, csel: cardSelector }
-    );
-    if (newCount === lastCount) idleRounds++; else idleRounds = 0;
-    lastCount = newCount;
-  }
-
   // Expand "More" buttons on truncated review text before reading it.
-  await page.evaluate((fsel) => {
-    document.querySelector(fsel)?.querySelectorAll('button[aria-label="See more"], button.w8nwRe').forEach((b) => b.click());
-  }, feedSelector);
+  await page.evaluate(
+    ({ fsel, tag }) => {
+      document.querySelector(fsel)?.querySelectorAll(`[${tag}] button`).forEach((b) => {
+        if (/more/i.test(b.textContent || '') || /more/i.test(b.getAttribute('aria-label') || '')) b.click();
+      });
+    },
+    { fsel: feedSelector, tag: CARD_TAG }
+  );
   await page.waitForTimeout(500);
 
   const reviews = await page.evaluate(
-    ({ fsel, csel, max }) => {
+    ({ fsel, tag, max }) => {
       const feed = document.querySelector(fsel);
       if (!feed) return [];
-      const cards = Array.from(feed.querySelectorAll(csel));
+      const cards = Array.from(feed.querySelectorAll(`[${tag}]`));
       return cards.slice(0, Number.isFinite(max) ? max : cards.length).map((card) => {
-        const reviewer = card.querySelector('.d4r55')?.textContent.trim() || null;
-        const ratingLabel = card.querySelector('span[role="img"][aria-label*="star" i]')?.getAttribute('aria-label') || '';
-        const ratingMatch = ratingLabel.match(/([\d.]+)\s*star/i);
+        const starEl = card.querySelector('span[aria-label*="star" i]');
+        const ratingMatch = (starEl?.getAttribute('aria-label') || '').match(/([\d.]+)\s*star/i);
         const rating = ratingMatch ? parseFloat(ratingMatch[1]) : null;
-        const date = card.querySelector('.rsqaWe')?.textContent.trim() || null;
-        const text = card.querySelector('.wiI7pd')?.textContent.trim() || card.textContent.trim().slice(0, 500) || null;
+
+        // Reviewer name: usually the accessible name on a profile-photo
+        // button/image near the top of the card.
+        const nameEl = card.querySelector('button[aria-label]:not([aria-label*="star" i]), img[alt]:not([alt=""])');
+        const reviewer = (nameEl?.getAttribute('aria-label') || nameEl?.getAttribute('alt') || '').replace(/^photo of /i, '').trim() || null;
+
+        // Relative date: a short text node containing "ago" / Arabic "منذ".
+        const dateEl = Array.from(card.querySelectorAll('span, div')).find((el) =>
+          /\bago\b/i.test(el.textContent || '') || /منذ/.test(el.textContent || '')
+        );
+        const date = dateEl ? dateEl.textContent.trim() : null;
+
+        // Review text: the longest text-bearing element in the card that
+        // isn't the reviewer name or the date string.
+        const textCandidates = Array.from(card.querySelectorAll('span, div'))
+          .map((el) => el.textContent.trim())
+          .filter((t) => t && t !== reviewer && t !== date && t.length > 15);
+        const text = textCandidates.sort((a, b) => b.length - a.length)[0] || null;
+
         return { reviewer, rating, date, text };
       });
     },
-    { fsel: feedSelector, csel: cardSelector, max: maxReviews }
+    { fsel: feedSelector, tag: CARD_TAG, max: maxReviews }
   );
 
   return { reviews, debug: reviews.length ? 'ok' : 'no-matches' };
