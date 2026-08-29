@@ -1,0 +1,14 @@
+{
+  "name": "maps-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Personal-use Google Maps business scraper (name, rating, photos, location link) — standalone from the Garage app.",
+  "type": "commonjs",
+  "main": "scraper.js",
+  "scripts": {
+    "scrape": "node scraper.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
