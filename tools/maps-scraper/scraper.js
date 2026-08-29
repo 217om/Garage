@@ -30,6 +30,20 @@ function parseArgs() {
   return opts;
 }
 
+const CSV_COLUMNS = ['name', 'category', 'rating', 'reviewCount', 'address', 'phone', 'website', 'mapsUrl', 'lat', 'lng', 'photoUrl', 'error'];
+
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  const s = String(value);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function toCsv(records) {
+  const header = CSV_COLUMNS.join(',');
+  const rows = records.map((r) => CSV_COLUMNS.map((col) => csvEscape(r[col])).join(','));
+  return [header, ...rows].join('\n') + '\n';
+}
+
 function extractCoordsFromUrl(url) {
   const m = url.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
   if (!m) return { lat: null, lng: null };
@@ -154,7 +168,9 @@ async function main() {
   console.log(`[+] Opening search results...`);
 
   const browser = await chromium.launch({
-    executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+    // Set PW_CHROME_PATH to point at a specific Chromium binary (e.g. one
+    // already installed outside of `npx playwright install`).
+    executablePath: process.env.PW_CHROME_PATH || undefined,
     headless: opts.headless,
   });
   const context = await browser.newContext({
@@ -186,6 +202,10 @@ async function main() {
   const outPath = path.resolve(process.cwd(), opts.out);
   fs.writeFileSync(outPath, JSON.stringify(results, null, 2), 'utf-8');
   console.log(`[+] Saved ${results.length} records to ${outPath}`);
+
+  const csvPath = outPath.replace(/\.json$/i, '.csv');
+  fs.writeFileSync(csvPath, toCsv(results), 'utf-8');
+  console.log(`[+] Saved CSV to ${csvPath}`);
 }
 
 main().catch((err) => {
