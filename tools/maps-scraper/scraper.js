@@ -50,17 +50,25 @@ function extractCoordsFromUrl(url) {
   return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
 }
 
-async function autoScrollResults(page, maxIdleRounds = 4) {
+async function autoScrollResults(page, maxIdleRounds = 8) {
   const feedSelector = 'div[role="feed"]';
   await page.waitForSelector(feedSelector, { timeout: 30000 });
   let lastCount = 0;
   let idleRounds = 0;
+  let reachedEnd = false;
   while (idleRounds < maxIdleRounds) {
     await page.evaluate((sel) => {
       const feed = document.querySelector(sel);
       if (feed) feed.scrollTop = feed.scrollHeight;
     }, feedSelector);
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(1800);
+
+    reachedEnd = await page.evaluate(
+      (sel) => !!document.querySelector(sel)?.textContent.match(/reached the end of the list|You've reached the end/i),
+      feedSelector
+    );
+    if (reachedEnd) break;
+
     const count = await page.evaluate((sel) => document.querySelectorAll(`${sel} a[href*="/maps/place/"]`).length, feedSelector);
     if (count === lastCount) {
       idleRounds++;
@@ -69,6 +77,7 @@ async function autoScrollResults(page, maxIdleRounds = 4) {
       lastCount = count;
     }
   }
+  console.log(reachedEnd ? '[+] Reached the end of the results list.' : '[+] Stopped: no new listings after several scroll attempts (likely Google\'s per-search cap, ~120).');
   return page.evaluate((sel) => {
     const anchors = Array.from(document.querySelectorAll(`${sel} a[href*="/maps/place/"]`));
     const seen = new Set();
